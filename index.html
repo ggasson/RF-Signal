@@ -1,20 +1,173 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>MQTT Live Dashboard</title>
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Snake Game</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    canvas {
+      background: #222;
+      display: block;
+      margin: 20px auto;
+      border: 3px solid #555;
+    }
+    #menu, #gameOver {
+      margin-top: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-  <h1>MQTT Data</h1>
-  <p id="output">Waiting for messages...</p>
+
+  <h1>🐍 Snake Game</h1>
+
+  <div id="menu">
+    <p>Select Difficulty:</p>
+    <button onclick="startGame('easy')">Easy</button>
+    <button onclick="startGame('medium')">Medium</button>
+    <button onclick="startGame('hard')">Hard</button>
+  </div>
+
+  <canvas id="gameCanvas" width="400" height="400" style="display:none;"></canvas>
+
+  <div id="hud" style="display:none;">
+    <p>Score: <span id="score">0</span> | High Score: <span id="highScore">0</span></p>
+  </div>
+
+  <div id="gameOver" style="display:none;">
+    <h2>Game Over</h2>
+    <p>Final Score: <span id="finalScore">0</span></p>
+    <button onclick="showMenu()">Restart</button>
+  </div>
+
   <script>
-    const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-    client.on('connect', () => {
-      client.subscribe('test/topic');
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const box = 20; // size of each grid square
+    let snake, direction, food, score, gameInterval, speed;
+
+    const scoreEl = document.getElementById("score");
+    const highScoreEl = document.getElementById("highScore");
+    const finalScoreEl = document.getElementById("finalScore");
+
+    let highScore = localStorage.getItem("snakeHighScore") || 0;
+    highScoreEl.textContent = highScore;
+
+    function startGame(difficulty) {
+      document.getElementById("menu").style.display = "none";
+      document.getElementById("gameOver").style.display = "none";
+      canvas.style.display = "block";
+      document.getElementById("hud").style.display = "block";
+
+      snake = [{x: 9*box, y: 10*box}];
+      direction = null;
+      score = 0;
+      scoreEl.textContent = score;
+      food = spawnFood();
+
+      // set speed based on difficulty
+      speed = (difficulty === "easy") ? 200 : (difficulty === "medium") ? 150 : 100;
+
+      clearInterval(gameInterval);
+      gameInterval = setInterval(draw, speed);
+    }
+
+    function showMenu() {
+      document.getElementById("menu").style.display = "block";
+      document.getElementById("gameOver").style.display = "none";
+      canvas.style.display = "none";
+      document.getElementById("hud").style.display = "none";
+    }
+
+    document.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft" && direction !== "RIGHT") direction = "LEFT";
+      else if (e.key === "ArrowUp" && direction !== "DOWN") direction = "UP";
+      else if (e.key === "ArrowRight" && direction !== "LEFT") direction = "RIGHT";
+      else if (e.key === "ArrowDown" && direction !== "UP") direction = "DOWN";
     });
-    client.on('message', (topic, message) => {
-      document.getElementById('output').innerText = message.toString();
-    });
+
+    function spawnFood() {
+      return {
+        x: Math.floor(Math.random()* (canvas.width/box)) * box,
+        y: Math.floor(Math.random()* (canvas.height/box)) * box
+      };
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // draw snake
+      for (let i = 0; i < snake.length; i++) {
+        ctx.fillStyle = (i === 0) ? "lime" : "green";
+        ctx.fillRect(snake[i].x, snake[i].y, box, box);
+      }
+
+      // draw food
+      ctx.fillStyle = "red";
+      ctx.fillRect(food.x, food.y, box, box);
+
+      // snake head
+      let snakeX = snake[0].x;
+      let snakeY = snake[0].y;
+
+      if (direction === "LEFT") snakeX -= box;
+      if (direction === "UP") snakeY -= box;
+      if (direction === "RIGHT") snakeX += box;
+      if (direction === "DOWN") snakeY += box;
+
+      // check collision with food
+      if (snakeX === food.x && snakeY === food.y) {
+        score++;
+        scoreEl.textContent = score;
+        food = spawnFood();
+      } else {
+        snake.pop();
+      }
+
+      // new head
+      let newHead = {x: snakeX, y: snakeY};
+
+      // game over conditions
+      if (
+        snakeX < 0 || snakeY < 0 ||
+        snakeX >= canvas.width || snakeY >= canvas.height ||
+        collision(newHead, snake)
+      ) {
+        clearInterval(gameInterval);
+        document.getElementById("finalScore").textContent = score;
+        document.getElementById("gameOver").style.display = "block";
+        canvas.style.display = "none";
+        document.getElementById("hud").style.display = "none";
+
+        if (score > highScore) {
+          highScore = score;
+          localStorage.setItem("snakeHighScore", highScore);
+        }
+        highScoreEl.textContent = highScore;
+      }
+
+      snake.unshift(newHead);
+    }
+
+    function collision(head, array) {
+      for (let i = 0; i < array.length; i++) {
+        if (head.x === array[i].x && head.y === array[i].y) return true;
+      }
+      return false;
+    }
   </script>
+
 </body>
 </html>
