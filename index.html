@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Snake Game with Sprites</title>
+  <title>Snake Game with Foods</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -37,7 +37,7 @@
     <button onclick="startGame('hard')">Hard</button>
   </div>
 
-  <canvas id="gameCanvas" width="1000" height="800" style="display:none;"></canvas>
+  <canvas id="gameCanvas" width="800" height="600" style="display:none;"></canvas>
 
   <div id="hud" style="display:none;">
     <p>Score: <span id="score">0</span> | High Score: <span id="highScore">0</span></p>
@@ -60,13 +60,18 @@
     const highScoreEl = document.getElementById("highScore");
     const finalScoreEl = document.getElementById("finalScore");
 
-    // load images
-    const headImg = new Image();
-    headImg.src = "snake_head.png";
-    const bodyImg = new Image();
-    bodyImg.src = "snake_body.png";
-    const tailImg = new Image();
-    tailImg.src = "snake_tail.png";
+    // Load snake sprites
+    const headImg = new Image(); headImg.src = "snake_head.png";
+    const bodyImg = new Image(); bodyImg.src = "snake_body.png";
+    const tailImg = new Image(); tailImg.src = "snake_tail.png";
+
+    // Define food types
+    const foodTypes = [
+      { img: "food_apple.png", growth: 1, score: 1 },
+      { img: "food_banana.png", growth: 2, score: 2 },
+      { img: "food_strawberry.png", growth: 3, score: 3 },
+      { img: "food_watermelon.png", growth: 4, score: 5 }
+    ];
 
     let highScore = localStorage.getItem("snakeHighScore") || 0;
     highScoreEl.textContent = highScore;
@@ -74,130 +79,4 @@
     function startGame(difficulty) {
       document.getElementById("menu").style.display = "none";
       document.getElementById("gameOver").style.display = "none";
-      canvas.style.display = "block";
-      document.getElementById("hud").style.display = "block";
-
-      snake = [{x: 9*box, y: 10*box}];
-      direction = "RIGHT";
-      score = 0;
-      scoreEl.textContent = score;
-      food = spawnFood();
-
-      speed = (difficulty === "easy") ? 200 : (difficulty === "medium") ? 150 : 100;
-
-      clearInterval(gameInterval);
-      gameInterval = setInterval(draw, speed);
-    }
-
-    function showMenu() {
-      document.getElementById("menu").style.display = "block";
-      document.getElementById("gameOver").style.display = "none";
-      canvas.style.display = "none";
-      document.getElementById("hud").style.display = "none";
-    }
-
-    document.addEventListener("keydown", e => {
-      if (e.key === "ArrowLeft" && direction !== "RIGHT") direction = "LEFT";
-      else if (e.key === "ArrowUp" && direction !== "DOWN") direction = "UP";
-      else if (e.key === "ArrowRight" && direction !== "LEFT") direction = "RIGHT";
-      else if (e.key === "ArrowDown" && direction !== "UP") direction = "DOWN";
-    });
-
-    function spawnFood() {
-      return {
-        x: Math.floor(Math.random()* (canvas.width/box)) * box,
-        y: Math.floor(Math.random()* (canvas.height/box)) * box
-      };
-    }
-
-    function drawSegment(img, x, y, angle=0) {
-      ctx.save();
-      ctx.translate(x + box/2, y + box/2);
-      ctx.rotate(angle);
-      ctx.drawImage(img, -box/2, -box/2, box, box);
-      ctx.restore();
-    }
-
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // draw food
-      ctx.fillStyle = "red";
-      ctx.fillRect(food.x, food.y, box, box);
-
-      // move snake
-      let headX = snake[0].x;
-      let headY = snake[0].y;
-
-      if (direction === "LEFT") headX -= box;
-      if (direction === "UP") headY -= box;
-      if (direction === "RIGHT") headX += box;
-      if (direction === "DOWN") headY += box;
-
-      // check collision with food
-      if (headX === food.x && headY === food.y) {
-        score++;
-        scoreEl.textContent = score;
-        food = spawnFood();
-      } else {
-        snake.pop();
-      }
-
-      let newHead = {x: headX, y: headY};
-
-      // game over check
-      if (
-        headX < 0 || headY < 0 ||
-        headX >= canvas.width || headY >= canvas.height ||
-        collision(newHead, snake)
-      ) {
-        clearInterval(gameInterval);
-        document.getElementById("finalScore").textContent = score;
-        document.getElementById("gameOver").style.display = "block";
-        canvas.style.display = "none";
-        document.getElementById("hud").style.display = "none";
-
-        if (score > highScore) {
-          highScore = score;
-          localStorage.setItem("snakeHighScore", highScore);
-        }
-        highScoreEl.textContent = highScore;
-        return;
-      }
-
-      snake.unshift(newHead);
-
-      // draw snake
-      for (let i = 0; i < snake.length; i++) {
-        let seg = snake[i];
-        if (i === 0) { // head
-          let angle = (direction === "RIGHT") ? 0 :
-                      (direction === "DOWN") ? Math.PI/2 :
-                      (direction === "LEFT") ? Math.PI :
-                      -Math.PI/2;
-          drawSegment(headImg, seg.x, seg.y, angle);
-        } else if (i === snake.length - 1) { // tail
-          let prev = snake[i-1];
-          let dx = seg.x - prev.x;
-          let dy = seg.y - prev.y;
-          let angle = (dx === box) ? 0 :
-                      (dy === box) ? Math.PI/2 :
-                      (dx === -box) ? Math.PI :
-                      -Math.PI/2;
-          drawSegment(tailImg, seg.x, seg.y, angle);
-        } else { // body
-          drawSegment(bodyImg, seg.x, seg.y);
-        }
-      }
-    }
-
-    function collision(head, array) {
-      for (let i = 0; i < array.length; i++) {
-        if (head.x === array[i].x && head.y === array[i].y) return true;
-      }
-      return false;
-    }
-  </script>
-
-</body>
-</html>
+      canvas.style.display = "
