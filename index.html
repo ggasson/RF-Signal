@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MQTT Live Dashboard</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+  <h1>MQTT Data</h1>
+  <p id="output">Waiting for messages...</p>
+  <script>
+    const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+    client.on('connect', () => {
+      client.subscribe('test/topic');
+    });
+    client.on('message', (topic, message) => {
+      document.getElementById('output').innerText = message.toString();
+    });
+  </script>
+</body>
+</html>
