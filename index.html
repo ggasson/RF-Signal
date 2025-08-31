@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Snake Game Phase 2</title>
+  <meta charset="UTF-8" />
+  <title>Snake Game Phase 2 (Fixed)</title>
   <style>
     body { font-family: Arial, sans-serif; background:#111; color:#eee; text-align:center; margin:0; }
     canvas { background:#222; display:block; margin:20px auto; border:3px solid #555; }
@@ -10,7 +10,6 @@
   </style>
 </head>
 <body>
-
   <h1>🐍 Snake Game</h1>
 
   <div id="menu">
@@ -24,8 +23,8 @@
 
   <div id="hud" style="display:none;">
     <p>
-      Score: <span id="score">0</span> | 
-      High Score: <span id="highScore">0</span> | 
+      Score: <span id="score">0</span> |
+      High Score: <span id="highScore">0</span> |
       <span id="status"></span>
     </p>
   </div>
@@ -41,8 +40,12 @@
     const ctx = canvas.getContext("2d");
     const box = 20;
 
+    // Toggle obstacles on/off
+    const ENABLE_OBSTACLES = false;
+
     let snake, direction, food, score, gameInterval, speed, grow, paused, goldenFood;
     let goldenTimer = 0;
+    let obstacles = []; // grid-aligned obstacles (cells)
 
     const scoreEl = document.getElementById("score");
     const highScoreEl = document.getElementById("highScore");
@@ -62,18 +65,17 @@
       { img: "food_watermelon.png", growth: 4, score: 5 }
     ];
 
-    // Special golden food
-    const goldenFoodImg = new Image(); goldenFoodImg.src = "food_golden.png"; // generate later if you like
-    const goldenConfig = { growth: 6, score: 10, lifetime: 300 }; // ticks (~seconds)
-
-    // Obstacles (simple static walls)
-    const obstacles = [
-      { x: 200, y: 200, w: 100, h: 20 },
-      { x: 400, y: 300, w: 20, h: 100 }
-    ];
+    // Golden food (optional image; if missing, we’ll draw a circle)
+    const goldenFoodImg = new Image(); goldenFoodImg.src = "food_golden.png";
+    const goldenConfig = { growth: 6, score: 10, lifetime: 300 }; // ticks
 
     let highScore = Number(localStorage.getItem("snakeHighScore") || 0);
     highScoreEl.textContent = highScore;
+
+    function gridCols() { return canvas.width / box | 0; }
+    function gridRows() { return canvas.height / box | 0; }
+
+    function cellToPx(c) { return c * box; }
 
     function startGame(difficulty) {
       document.getElementById("menu").style.display = "none";
@@ -81,7 +83,8 @@
       canvas.style.display = "block";
       document.getElementById("hud").style.display = "block";
 
-      snake = [{ x: 9*box, y: 10*box }];
+      // Start near top-left so first moves are clear
+      snake = [{ x: 5*box, y: 5*box }];
       direction = "RIGHT";
       score = 0;
       grow = 0;
@@ -90,6 +93,11 @@
       goldenTimer = 0;
       scoreEl.textContent = score;
       statusEl.textContent = "";
+
+      // Build obstacles (but keep away from starting row/col)
+      obstacles = [];
+      if (ENABLE_OBSTACLES) generateObstacles();
+
       food = spawnFood();
 
       speed = (difficulty === "easy") ? 200 : (difficulty === "medium") ? 150 : 100;
@@ -122,6 +130,10 @@
       return snake.some(seg => seg.x === x && seg.y === y);
     }
 
+    function onObstacle(x, y) {
+      return obstacles.some(c => c.x === x && c.y === y);
+    }
+
     function spawnFood() {
       let type = foodTypes[Math.floor(Math.random() * foodTypes.length)];
       let foodImg = new Image();
@@ -129,9 +141,10 @@
 
       let fx, fy;
       do {
-        fx = Math.floor(Math.random() * (canvas.width / box)) * box;
-        fy = Math.floor(Math.random() * (canvas.height / box)) * box;
-      } while (onSnake(fx, fy));
+        fx = Math.floor(Math.random() * gridCols()) * box;
+        fy = Math.floor(Math.random() * gridRows()) * box;
+      } while (onSnake(fx, fy) || onObstacle(fx, fy)); // avoid snake & obstacles
+
       return { x: fx, y: fy, type, img: foodImg };
     }
 
@@ -144,34 +157,44 @@
     }
 
     function draw() {
-      if (paused) return; // skip update
+      if (paused) return;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Draw obstacles
-      ctx.fillStyle = "#666";
-      obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
+      if (ENABLE_OBSTACLES) {
+        ctx.fillStyle = "#666";
+        obstacles.forEach(c => ctx.fillRect(c.x, c.y, box, box));
+      }
 
       // Draw food
       ctx.drawImage(food.img, food.x, food.y, box, box);
 
-      // Handle golden food
-      if (!goldenFood && Math.random() < 0.002) { // rare chance
-        goldenFood = {
-          x: Math.floor(Math.random()*(canvas.width/box))*box,
-          y: Math.floor(Math.random()*(canvas.height/box))*box,
-          type: goldenConfig,
-          img: goldenFoodImg
-        };
+      // Golden food random spawn
+      if (!goldenFood && Math.random() < 0.002) {
+        let gx, gy;
+        do {
+          gx = Math.floor(Math.random() * gridCols()) * box;
+          gy = Math.floor(Math.random() * gridRows()) * box;
+        } while (onSnake(gx, gy) || onObstacle(gx, gy) || (gx === food.x && gy === food.y));
+        goldenFood = { x: gx, y: gy, type: goldenConfig, img: goldenFoodImg };
         goldenTimer = goldenConfig.lifetime;
       }
       if (goldenFood) {
-        ctx.drawImage(goldenFood.img, goldenFood.x, goldenFood.y, box, box);
+        if (goldenFoodImg.complete) {
+          ctx.drawImage(goldenFood.img, goldenFood.x, goldenFood.y, box, box);
+        } else {
+          // fallback draw if image missing
+          ctx.fillStyle = "gold";
+          ctx.beginPath();
+          ctx.arc(goldenFood.x + box/2, goldenFood.y + box/2, box/2 - 2, 0, Math.PI*2);
+          ctx.fill();
+        }
         goldenTimer--;
         if (goldenTimer <= 0) goldenFood = null;
       }
 
-      // Move snake
+      // Next head position
       let headX = snake[0].x;
       let headY = snake[0].y;
       if (direction === "LEFT")  headX -= box;
@@ -181,7 +204,12 @@
       const newHead = { x: headX, y: headY };
 
       // Collisions
-      if (headX < 0 || headY < 0 || headX >= canvas.width || headY >= canvas.height || collision(newHead, snake) || collisionObstacle(newHead)) {
+      if (
+        headX < 0 || headY < 0 ||
+        headX >= canvas.width || headY >= canvas.height ||
+        collision(newHead, snake) ||
+        (ENABLE_OBSTACLES && onObstacle(headX, headY))
+      ) {
         clearInterval(gameInterval);
         finalScoreEl.textContent = score;
         document.getElementById("gameOver").style.display = "block";
@@ -195,9 +223,10 @@
         return;
       }
 
+      // Move
       snake.unshift(newHead);
 
-      // Eating normal food
+      // Eat normal food
       if (newHead.x === food.x && newHead.y === food.y) {
         score += food.type.score;
         scoreEl.textContent = score;
@@ -205,7 +234,7 @@
         food = spawnFood();
       }
 
-      // Eating golden food
+      // Eat golden food
       if (goldenFood && newHead.x === goldenFood.x && newHead.y === goldenFood.y) {
         score += goldenFood.type.score;
         scoreEl.textContent = score;
@@ -213,6 +242,7 @@
         goldenFood = null;
       }
 
+      // Tail management
       if (grow > 0) {
         grow--;
       } else {
@@ -223,24 +253,26 @@
       for (let i = 0; i < snake.length; i++) {
         const seg = snake[i];
         if (i === 0) {
-          const angle = (direction === "RIGHT") ? 0 :
-                        (direction === "DOWN")  ? Math.PI/2 :
-                        (direction === "LEFT")  ? Math.PI   : -Math.PI/2;
+          const angle =
+            direction === "RIGHT" ? 0 :
+            direction === "DOWN"  ? Math.PI/2 :
+            direction === "LEFT"  ? Math.PI   : -Math.PI/2;
           drawSegment(headImg, seg.x, seg.y, angle);
         } else if (i === snake.length - 1) {
           const prev = snake[i-1];
           const dx = seg.x - prev.x, dy = seg.y - prev.y;
-          const angle = (dx === box) ? 0 :
-                        (dy === box) ? Math.PI/2 :
-                        (dx === -box)? Math.PI : -Math.PI/2;
+          const angle =
+            dx === box  ? 0 :
+            dy === box  ? Math.PI/2 :
+            dx === -box ? Math.PI : -Math.PI/2;
           drawSegment(tailImg, seg.x, seg.y, angle);
         } else {
           drawSegment(bodyImg, seg.x, seg.y);
         }
       }
 
-      // Speed up gradually
-      if (score % 5 === 0 && score > 0) {
+      // Speed up gradually (but not at score 0)
+      if (score > 0 && score % 5 === 0) {
         clearInterval(gameInterval);
         speed = Math.max(50, speed - 5);
         gameInterval = setInterval(draw, speed);
@@ -251,11 +283,21 @@
       return arr.some(seg => head.x === seg.x && head.y === seg.y);
     }
 
-    function collisionObstacle(head) {
-      return obstacles.some(o =>
-        head.x >= o.x && head.x < o.x + o.w &&
-        head.y >= o.y && head.y < o.y + o.h
-      );
+    // Create some safe, grid-aligned obstacles away from the start area
+    function generateObstacles() {
+      const cols = gridCols();
+      const rows = gridRows();
+      // Example: a small box in the lower-right quadrant
+      const startCol = Math.floor(cols*0.6);
+      const startRow = Math.floor(rows*0.6);
+      for (let x = startCol; x < startCol + 5; x++) {
+        obstacles.push({ x: cellToPx(x), y: cellToPx(startRow) });
+      }
+      for (let y = startRow; y < startRow + 5; y++) {
+        obstacles.push({ x: cellToPx(startCol+2), y: cellToPx(y) });
+      }
+      // Ensure none sit on the snake start or the cell immediately in front
+      obstacles = obstacles.filter(c => !( (c.x === 5*box && c.y === 5*box) || (c.x === 6*box && c.y === 5*box) ));
     }
   </script>
 </body>
