@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Snake Game with Foods</title>
+  <title>Snake Game Phase 2</title>
   <style>
     body { font-family: Arial, sans-serif; background:#111; color:#eee; text-align:center; margin:0; }
     canvas { background:#222; display:block; margin:20px auto; border:3px solid #555; }
@@ -23,7 +23,11 @@
   <canvas id="gameCanvas" width="800" height="600" style="display:none;"></canvas>
 
   <div id="hud" style="display:none;">
-    <p>Score: <span id="score">0</span> | High Score: <span id="highScore">0</span></p>
+    <p>
+      Score: <span id="score">0</span> | 
+      High Score: <span id="highScore">0</span> | 
+      <span id="status"></span>
+    </p>
   </div>
 
   <div id="gameOver" style="display:none;">
@@ -37,11 +41,13 @@
     const ctx = canvas.getContext("2d");
     const box = 20;
 
-    let snake, direction, food, score, gameInterval, speed, grow;
+    let snake, direction, food, score, gameInterval, speed, grow, paused, goldenFood;
+    let goldenTimer = 0;
 
     const scoreEl = document.getElementById("score");
     const highScoreEl = document.getElementById("highScore");
     const finalScoreEl = document.getElementById("finalScore");
+    const statusEl = document.getElementById("status");
 
     // Snake sprites
     const headImg = new Image(); headImg.src = "snake_head.png";
@@ -54,6 +60,16 @@
       { img: "food_banana.png",     growth: 2, score: 2 },
       { img: "food_strawberry.png", growth: 3, score: 3 },
       { img: "food_watermelon.png", growth: 4, score: 5 }
+    ];
+
+    // Special golden food
+    const goldenFoodImg = new Image(); goldenFoodImg.src = "food_golden.png"; // generate later if you like
+    const goldenConfig = { growth: 6, score: 10, lifetime: 300 }; // ticks (~seconds)
+
+    // Obstacles (simple static walls)
+    const obstacles = [
+      { x: 200, y: 200, w: 100, h: 20 },
+      { x: 400, y: 300, w: 20, h: 100 }
     ];
 
     let highScore = Number(localStorage.getItem("snakeHighScore") || 0);
@@ -69,7 +85,11 @@
       direction = "RIGHT";
       score = 0;
       grow = 0;
+      paused = false;
+      goldenFood = null;
+      goldenTimer = 0;
       scoreEl.textContent = score;
+      statusEl.textContent = "";
       food = spawnFood();
 
       speed = (difficulty === "easy") ? 200 : (difficulty === "medium") ? 150 : 100;
@@ -90,7 +110,13 @@
       else if (e.key === "ArrowUp"   && direction !== "DOWN")  direction = "UP";
       else if (e.key === "ArrowRight"&& direction !== "LEFT")  direction = "RIGHT";
       else if (e.key === "ArrowDown" && direction !== "UP")    direction = "DOWN";
+      else if (e.key.toLowerCase() === "p") togglePause();
     });
+
+    function togglePause() {
+      paused = !paused;
+      statusEl.textContent = paused ? "⏸ Paused" : "";
+    }
 
     function onSnake(x, y) {
       return snake.some(seg => seg.x === x && seg.y === y);
@@ -105,8 +131,7 @@
       do {
         fx = Math.floor(Math.random() * (canvas.width / box)) * box;
         fy = Math.floor(Math.random() * (canvas.height / box)) * box;
-      } while (onSnake(fx, fy)); // avoid spawning on snake
-
+      } while (onSnake(fx, fy));
       return { x: fx, y: fy, type, img: foodImg };
     }
 
@@ -119,23 +144,44 @@
     }
 
     function draw() {
+      if (paused) return; // skip update
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw obstacles
+      ctx.fillStyle = "#666";
+      obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
 
       // Draw food
       ctx.drawImage(food.img, food.x, food.y, box, box);
 
-      // Compute next head
+      // Handle golden food
+      if (!goldenFood && Math.random() < 0.002) { // rare chance
+        goldenFood = {
+          x: Math.floor(Math.random()*(canvas.width/box))*box,
+          y: Math.floor(Math.random()*(canvas.height/box))*box,
+          type: goldenConfig,
+          img: goldenFoodImg
+        };
+        goldenTimer = goldenConfig.lifetime;
+      }
+      if (goldenFood) {
+        ctx.drawImage(goldenFood.img, goldenFood.x, goldenFood.y, box, box);
+        goldenTimer--;
+        if (goldenTimer <= 0) goldenFood = null;
+      }
+
+      // Move snake
       let headX = snake[0].x;
       let headY = snake[0].y;
       if (direction === "LEFT")  headX -= box;
       if (direction === "UP")    headY -= box;
       if (direction === "RIGHT") headX += box;
       if (direction === "DOWN")  headY += box;
-
       const newHead = { x: headX, y: headY };
 
-      // Collisions (walls & self) checked BEFORE modifying snake
-      if (headX < 0 || headY < 0 || headX >= canvas.width || headY >= canvas.height || collision(newHead, snake)) {
+      // Collisions
+      if (headX < 0 || headY < 0 || headX >= canvas.width || headY >= canvas.height || collision(newHead, snake) || collisionObstacle(newHead)) {
         clearInterval(gameInterval);
         finalScoreEl.textContent = score;
         document.getElementById("gameOver").style.display = "block";
@@ -149,20 +195,25 @@
         return;
       }
 
-      // Move: add new head
       snake.unshift(newHead);
 
-      // Eat?
+      // Eating normal food
       if (newHead.x === food.x && newHead.y === food.y) {
         score += food.type.score;
         scoreEl.textContent = score;
-        grow += food.type.growth;     // queue growth
+        grow += food.type.growth;
         food = spawnFood();
       }
 
-      // Tail handling
+      // Eating golden food
+      if (goldenFood && newHead.x === goldenFood.x && newHead.y === goldenFood.y) {
+        score += goldenFood.type.score;
+        scoreEl.textContent = score;
+        grow += goldenFood.type.growth;
+        goldenFood = null;
+      }
+
       if (grow > 0) {
-        // keep the extra segment (no pop)
         grow--;
       } else {
         snake.pop();
@@ -172,33 +223,40 @@
       for (let i = 0; i < snake.length; i++) {
         const seg = snake[i];
         if (i === 0) {
-          const angle =
-            direction === "RIGHT" ? 0 :
-            direction === "DOWN"  ? Math.PI/2 :
-            direction === "LEFT"  ? Math.PI   : -Math.PI/2;
+          const angle = (direction === "RIGHT") ? 0 :
+                        (direction === "DOWN")  ? Math.PI/2 :
+                        (direction === "LEFT")  ? Math.PI   : -Math.PI/2;
           drawSegment(headImg, seg.x, seg.y, angle);
         } else if (i === snake.length - 1) {
           const prev = snake[i-1];
-          const dx = seg.x - prev.x;
-          const dy = seg.y - prev.y;
-          const angle =
-            dx === box  ? 0 :
-            dy === box  ? Math.PI/2 :
-            dx === -box ? Math.PI : -Math.PI/2;
+          const dx = seg.x - prev.x, dy = seg.y - prev.y;
+          const angle = (dx === box) ? 0 :
+                        (dy === box) ? Math.PI/2 :
+                        (dx === -box)? Math.PI : -Math.PI/2;
           drawSegment(tailImg, seg.x, seg.y, angle);
         } else {
           drawSegment(bodyImg, seg.x, seg.y);
         }
       }
+
+      // Speed up gradually
+      if (score % 5 === 0 && score > 0) {
+        clearInterval(gameInterval);
+        speed = Math.max(50, speed - 5);
+        gameInterval = setInterval(draw, speed);
+      }
     }
 
     function collision(head, arr) {
-      for (let i = 0; i < arr.length; i++) {
-        if (head.x === arr[i].x && head.y === arr[i].y) return true;
-      }
-      return false;
+      return arr.some(seg => head.x === seg.x && head.y === seg.y);
+    }
+
+    function collisionObstacle(head) {
+      return obstacles.some(o =>
+        head.x >= o.x && head.x < o.x + o.w &&
+        head.y >= o.y && head.y < o.y + o.h
+      );
     }
   </script>
-
 </body>
 </html>
